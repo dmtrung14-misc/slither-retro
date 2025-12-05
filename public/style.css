@@ -618,6 +618,27 @@ canvas {
   }
 }
 
+/* Team lobby specific styles */
+#team-lobby .card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#team-lobby .card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--shadow);
+}
+
+#team1-players > div,
+#team2-players > div {
+  transition: all 0.2s ease;
+}
+
+#team1-players > div:hover,
+#team2-players > div:hover {
+  transform: translateX(4px);
+  background: var(--accent-soft) !important;
+}
+
 @media (max-width: 900px) {
   .page {
     padding: 18px 16px;

@@ -35,6 +35,7 @@ function roomDefaults() {
     speed: 3,
     maxPlayers: 4,
     timerMinutes: 0,
+    gameMode: "classic",
   };
 }
 
@@ -52,11 +53,13 @@ function createRoom(options) {
   normalized.speed = clamp(Number(normalized.speed) || 3, 1, 5);
   normalized.maxPlayers = clamp(Number(normalized.maxPlayers) || 4, 1, 4);
   normalized.timerMinutes = clamp(Number(normalized.timerMinutes) || 0, 0, 60);
+  normalized.gameMode = normalized.gameMode || "classic";
 
   const room = {
     code,
     options: normalized,
     players: new Map(),
+    spectators: new Map(),
     hostId: null,
     food: null,
     bonusFood: null,
@@ -68,15 +71,22 @@ function createRoom(options) {
         ? Date.now() + normalized.timerMinutes * 60_000
         : null,
     ended: false,
+    matchStarted: false, // For team mode
+    teams: { team1: [], team2: [] }, // For team mode
+    teamScores: { team1: 0, team2: 0 }, // For team mode
     tickMs: Math.max(
       MIN_TICK_MS,
       BASE_TICK_MS - (normalized.speed - 1) * 18,
     ),
   };
 
-  spawnFood(room);
-  scheduleBonus(room);
-  startLoop(room);
+  // Only start loop for classic mode, team mode starts when host starts match
+  if (normalized.gameMode === "classic") {
+    spawnFood(room);
+    scheduleBonus(room);
+    startLoop(room);
+  }
+  
   rooms.set(code, room);
   return room;
 }
@@ -137,10 +147,6 @@ function stopLoop(room) {
 }
 
 function addPlayerToRoom(ws, room, payload) {
-  if (room.players.size >= room.options.maxPlayers) {
-    ws.send(stringify({ type: "error", message: "Room is full." }));
-    return null;
-  }
   if (room.ended) {
     ws.send(stringify({ type: "error", message: "Room is closed." }));
     return null;
@@ -148,6 +154,36 @@ function addPlayerToRoom(ws, room, payload) {
 
   const id = nanoid(8);
   const name = (payload?.name || "Player").slice(0, 18);
+  
+  // Team mode: if match started, add as spectator
+  if (room.options.gameMode === "team" && room.matchStarted) {
+    const spectator = { id, name, ws };
+    room.spectators.set(id, spectator);
+    
+    ws.send(
+      stringify({
+        type: "joined",
+        playerId: id,
+        roomCode: room.code,
+        options: room.options,
+        hostId: room.hostId,
+        endAt: room.endAt,
+        isSpectator: true,
+        matchStarted: true,
+      }),
+    );
+    
+    broadcast(room, { type: "system", message: `${name} joined as spectator.` });
+    broadcastState(room);
+    return spectator;
+  }
+  
+  // Check player limit
+  if (room.players.size >= room.options.maxPlayers) {
+    ws.send(stringify({ type: "error", message: "Room is full." }));
+    return null;
+  }
+
   const color = COLORS[room.players.size % COLORS.length];
   const player = {
     id,
@@ -159,10 +195,15 @@ function addPlayerToRoom(ws, room, payload) {
     grow: 3,
     score: 0,
     alive: true,
+    team: null, // Will be set in team mode
     ws,
   };
 
-  respawnPlayer(room, player);
+  // Only respawn if classic mode or match already started
+  if (room.options.gameMode === "classic" || room.matchStarted) {
+    respawnPlayer(room, player);
+  }
+  
   room.players.set(id, player);
   if (!room.hostId) {
     room.hostId = id;
@@ -176,11 +217,20 @@ function addPlayerToRoom(ws, room, payload) {
       options: room.options,
       hostId: room.hostId,
       endAt: room.endAt,
+      matchStarted: room.matchStarted,
+      isSpectator: false,
     }),
   );
 
   broadcast(room, { type: "system", message: `${name} joined.` });
-  broadcastState(room);
+  
+  // Send initial team lobby state for team mode
+  if (room.options.gameMode === "team" && !room.matchStarted) {
+    broadcastTeamLobby(room);
+  } else {
+    broadcastState(room);
+  }
+  
   return player;
 }
 
@@ -249,9 +299,34 @@ function tickRoom(room) {
     const hitSnakeId = occupancy.get(`${next.x}:${next.y}`);
 
     if (hitSnakeId) {
+      const killer = room.players.get(hitSnakeId);
+      
+      // In team mode, check for friendly fire
+      if (room.options.gameMode === "team" && killer && player.team && killer.team === player.team) {
+        // Friendly fire - both players collide and die
+        const victim = player;
+        const victimLength = victim.body.length;
+        
+        // Decompose victim's body into food
+        victim.body.forEach(part => {
+          room.decomposedFood.push({
+            x: part.x,
+            y: part.y,
+            expiresAt: now + 10000, // 10 seconds
+          });
+        });
+        
+        victim.alive = false;
+        broadcast(room, {
+          type: "system",
+          message: `${victim.name} crashed into teammate ${killer.name}!`,
+        });
+        setTimeout(() => respawnPlayer(room, victim), 1200);
+        continue;
+      }
+      
       // Snake collision - player dies
       const victim = player;
-      const killer = room.players.get(hitSnakeId);
       const victimLength = victim.body.length;
       
       // Calculate kill bonus based on victim's size
@@ -262,6 +337,12 @@ function tickRoom(room) {
       if (killer && killer.alive) {
         killer.score += killBonus;
         killer.grow += Math.floor(victimLength / 3); // Grow based on victim size
+        
+        // In team mode, award points to team as well
+        if (room.options.gameMode === "team" && killer.team) {
+          room.teamScores[`team${killer.team}`] += killBonus;
+        }
+        
         broadcast(room, {
           type: "system",
           message: `${killer.name} eliminated ${victim.name}! +${killBonus} pts`,
@@ -338,6 +419,89 @@ function broadcast(room, data) {
       player.ws.send(payload);
     }
   }
+  // Also broadcast to spectators
+  if (room.spectators) {
+    for (const spectator of room.spectators.values()) {
+      if (spectator.ws.readyState === spectator.ws.OPEN) {
+        spectator.ws.send(payload);
+      }
+    }
+  }
+}
+
+function broadcastTeamLobby(room) {
+  const teams = {
+    team1: room.teams.team1.map(id => {
+      const p = room.players.get(id);
+      return p ? { id: p.id, name: p.name } : null;
+    }).filter(Boolean),
+    team2: room.teams.team2.map(id => {
+      const p = room.players.get(id);
+      return p ? { id: p.id, name: p.name } : null;
+    }).filter(Boolean),
+  };
+  
+  broadcast(room, {
+    type: "team_lobby_update",
+    teams,
+  });
+}
+
+function selectTeam(room, playerId, teamNum) {
+  const player = room.players.get(playerId);
+  if (!player) return;
+  
+  // Remove from both teams first
+  room.teams.team1 = room.teams.team1.filter(id => id !== playerId);
+  room.teams.team2 = room.teams.team2.filter(id => id !== playerId);
+  
+  // Add to selected team
+  if (teamNum === 1) {
+    room.teams.team1.push(playerId);
+    player.team = 1;
+  } else if (teamNum === 2) {
+    room.teams.team2.push(playerId);
+    player.team = 2;
+  }
+  
+  broadcastTeamLobby(room);
+}
+
+function startMatch(room) {
+  if (room.matchStarted) return;
+  
+  // Validate teams
+  if (room.teams.team1.length === 0 || room.teams.team2.length === 0) {
+    return false;
+  }
+  
+  if (room.teams.team1.length + room.teams.team2.length < 2) {
+    return false;
+  }
+  
+  room.matchStarted = true;
+  
+  // Spawn all players
+  for (const player of room.players.values()) {
+    respawnPlayer(room, player);
+  }
+  
+  // Start game loop
+  spawnFood(room);
+  scheduleBonus(room);
+  startLoop(room);
+  
+  // Notify all players
+  for (const player of room.players.values()) {
+    player.ws.send(stringify({
+      type: "match_started",
+      myTeam: player.team,
+      isSpectator: false,
+    }));
+  }
+  
+  broadcastState(room);
+  return true;
 }
 
 function broadcastState(room) {
@@ -352,6 +516,8 @@ function broadcastState(room) {
     hostId: room.hostId,
     endAt: room.endAt,
     ended: room.ended,
+    gameMode: room.options.gameMode,
+    teamScores: room.teamScores,
   };
 
   const scores = [];
@@ -363,8 +529,14 @@ function broadcastState(room) {
       body: player.body,
       alive: player.alive,
       score: player.score,
+      team: player.team,
     });
-    scores.push({ id: player.id, name: player.name, score: player.score });
+    scores.push({ 
+      id: player.id, 
+      name: player.name, 
+      score: player.score,
+      team: player.team,
+    });
   }
 
   snapshot.leaderboard = scores
@@ -427,6 +599,28 @@ wss.on("connection", (ws) => {
       currentPlayer = addPlayerToRoom(ws, room, message);
     } else if (message.type === "change_dir" && currentPlayer) {
       handleDirection(currentPlayer, message.dir);
+    } else if (message.type === "select_team" && currentRoom && currentPlayer) {
+      if (currentRoom.options.gameMode !== "team") {
+        ws.send(stringify({ type: "error", message: "Not in team mode." }));
+        return;
+      }
+      if (currentRoom.matchStarted) {
+        ws.send(stringify({ type: "error", message: "Match already started." }));
+        return;
+      }
+      selectTeam(currentRoom, currentPlayer.id, message.team);
+    } else if (message.type === "start_match" && currentRoom && currentPlayer) {
+      if (currentRoom.options.gameMode !== "team") {
+        ws.send(stringify({ type: "error", message: "Not in team mode." }));
+        return;
+      }
+      if (currentPlayer.id !== currentRoom.hostId) {
+        ws.send(stringify({ type: "error", message: "Only host can start match." }));
+        return;
+      }
+      if (!startMatch(currentRoom)) {
+        ws.send(stringify({ type: "error", message: "Need at least 1 player per team." }));
+      }
     } else if (message.type === "end_room" && currentRoom && currentPlayer) {
       if (currentPlayer.id !== currentRoom.hostId) {
         ws.send(
@@ -442,11 +636,30 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     if (currentRoom && currentPlayer) {
+      // Check if spectator
+      if (currentRoom.spectators && currentRoom.spectators.has(currentPlayer.id)) {
+        currentRoom.spectators.delete(currentPlayer.id);
+        broadcast(currentRoom, {
+          type: "system",
+          message: `${currentPlayer.name} (spectator) left.`,
+        });
+        return;
+      }
+      
+      // Regular player leaving
       currentRoom.players.delete(currentPlayer.id);
+      
+      // Remove from teams if in team mode
+      if (currentRoom.options.gameMode === "team") {
+        currentRoom.teams.team1 = currentRoom.teams.team1.filter(id => id !== currentPlayer.id);
+        currentRoom.teams.team2 = currentRoom.teams.team2.filter(id => id !== currentPlayer.id);
+      }
+      
       broadcast(currentRoom, {
         type: "system",
         message: `${currentPlayer.name} left.`,
       });
+      
       if (currentRoom.hostId === currentPlayer.id) {
         const nextHost = currentRoom.players.values().next().value;
         currentRoom.hostId = nextHost ? nextHost.id : null;
@@ -456,8 +669,15 @@ wss.on("connection", (ws) => {
             message: `${nextHost.name} is the new host.`,
           });
         }
+      }
+      
+      // Update team lobby or game state
+      if (currentRoom.options.gameMode === "team" && !currentRoom.matchStarted) {
+        broadcastTeamLobby(currentRoom);
+      } else {
         broadcastState(currentRoom);
       }
+      
       if (currentRoom.players.size === 0) {
         stopLoop(currentRoom);
         rooms.delete(currentRoom.code);

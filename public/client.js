@@ -2,6 +2,7 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 const landing = document.getElementById("landing");
+const teamLobby = document.getElementById("team-lobby");
 const play = document.getElementById("play");
 
 const statusEl = document.getElementById("status");
@@ -33,6 +34,19 @@ const mapSizeValue = document.getElementById("map-size-value");
 const speedValue = document.getElementById("speed-value");
 const maxPlayersValue = document.getElementById("max-players-value");
 const timerValue = document.getElementById("timer-value");
+const gameModeInput = document.getElementById("game-mode");
+
+// Team lobby elements
+const lobbyRoomCode = document.getElementById("lobby-room-code");
+const team1Players = document.getElementById("team1-players");
+const team2Players = document.getElementById("team2-players");
+const team1Count = document.getElementById("team1-count");
+const team2Count = document.getElementById("team2-count");
+const joinTeam1Btn = document.getElementById("join-team1");
+const joinTeam2Btn = document.getElementById("join-team2");
+const startMatchBtn = document.getElementById("start-match-btn");
+const leaveLobbyBtn = document.getElementById("leave-lobby-btn");
+const lobbyStatus = document.getElementById("lobby-status");
 
 let logicalSize = 0;
 
@@ -41,6 +55,9 @@ let playerId = null;
 let roomCode = null;
 let isHost = false;
 let connected = false;
+let gameMode = "classic";
+let isSpectator = false;
+let myTeam = null;
 // roundRect fallback for older browsers
 if (!CanvasRenderingContext2D.prototype.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
@@ -72,6 +89,8 @@ let lastState = {
   hostId: null,
   endAt: null,
   ended: false,
+  gameMode: "classic",
+  teamScores: { team1: 0, team2: 0 },
 };
 
 function updateSliderDisplay() {
@@ -88,13 +107,9 @@ timerMinutesInput.addEventListener("input", updateSliderDisplay);
 updateSliderDisplay();
 
 function go(view) {
-  if (view === "play") {
-    landing.classList.add("hidden");
-    play.classList.remove("hidden");
-  } else {
-    landing.classList.remove("hidden");
-    play.classList.add("hidden");
-  }
+  landing.classList.toggle("hidden", view !== "landing");
+  teamLobby.classList.toggle("hidden", view !== "team-lobby");
+  play.classList.toggle("hidden", view !== "play");
 }
 
 function setStatus(text) {
@@ -136,6 +151,7 @@ function connect(type) {
             speed: Number(speedInput.value),
             maxPlayers: Number(maxPlayersInput.value),
             timerMinutes: Number(timerMinutesInput.value),
+            gameMode: gameModeInput.value,
           },
         }
       : {
@@ -178,8 +194,65 @@ function handleMessage(message) {
       endAt = message.endAt || null;
       roomEnded = false;
       isHost = message.hostId === playerId;
-      setStatus("In room.");
+      gameMode = message.options?.gameMode || "classic";
+      isSpectator = message.isSpectator || false;
+      
+      if (gameMode === "team" && !message.matchStarted) {
+        // Go to team lobby
+        lobbyRoomCode.textContent = `Room: ${roomCode}`;
+        startMatchBtn.style.display = isHost ? "inline-block" : "none";
+        go("team-lobby");
+      } else {
+        // Go directly to play (classic mode or team mode already started)
+        setStatus(isSpectator ? "Spectating..." : "In room.");
+        roomLabel.textContent = `Room ${roomCode}`;
+        
+        // Add spectator badge if spectating
+        if (isSpectator) {
+          const badge = document.createElement("span");
+          badge.className = "pill muted spectator-badge";
+          badge.textContent = "SPECTATOR";
+          badge.style.marginLeft = "8px";
+          roomLabel.parentElement.appendChild(badge);
+        }
+        
+        timerLabel.hidden = !endAt;
+        endRoomBtn.hidden = !isHost;
+        copyBtn.hidden = false;
+        copyBtn.onclick = () => {
+          const url = `${location.origin}?room=${roomCode}`;
+          navigator.clipboard.writeText(url);
+          copyBtn.textContent = "Link copied";
+          setTimeout(() => (copyBtn.textContent = "Copy invite"), 1000);
+        };
+        if (isSpectator) {
+          setOverlay("Spectator Mode", "Match in progress. You are spectating.", false);
+        } else {
+          setOverlay("Quiet start", "Use WASD / arrows. Avoid walls and bodies.", false);
+        }
+        go("play");
+      }
+      break;
+    }
+    case "team_lobby_update": {
+      updateTeamLobby(message.teams);
+      break;
+    }
+    case "match_started": {
+      myTeam = message.myTeam;
+      isSpectator = message.isSpectator || false;
+      setStatus(isSpectator ? "Spectating..." : "Match started!");
       roomLabel.textContent = `Room ${roomCode}`;
+      
+      // Add spectator badge if spectating
+      if (isSpectator) {
+        const badge = document.createElement("span");
+        badge.className = "pill muted spectator-badge";
+        badge.textContent = "SPECTATOR";
+        badge.style.marginLeft = "8px";
+        roomLabel.parentElement.appendChild(badge);
+      }
+      
       timerLabel.hidden = !endAt;
       endRoomBtn.hidden = !isHost;
       copyBtn.hidden = false;
@@ -189,11 +262,12 @@ function handleMessage(message) {
         copyBtn.textContent = "Link copied";
         setTimeout(() => (copyBtn.textContent = "Copy invite"), 1000);
       };
-      setOverlay(
-        "Quiet start",
-        "Use WASD / arrows. Avoid walls and bodies.",
-        false,
-      );
+      if (isSpectator) {
+        setOverlay("Spectator Mode", "Match in progress. You are spectating.", false);
+      } else {
+        setOverlay("Fight!", `You are on Team ${myTeam}!`, true);
+        setTimeout(() => setOverlay("", "", false), 2000);
+      }
       go("play");
       break;
     }
@@ -231,16 +305,78 @@ function handleMessage(message) {
 
 function updateLeaderboard(entries) {
   leadersEl.innerHTML = "";
+  
+  // Show team scores if in team mode
+  if (lastState.gameMode === "team" && lastState.teamScores) {
+    const teamScoreDiv = document.createElement("div");
+    teamScoreDiv.style.cssText = "margin-bottom: 16px; padding: 12px; background: var(--bg-soft); border: 3px solid var(--line);";
+    teamScoreDiv.innerHTML = `
+      <div style="font-weight: 700; margin-bottom: 8px; color: var(--accent);">TEAM SCORES</div>
+      <div style="display: flex; justify-content: space-between; gap: 8px;">
+        <span style="color: #FF6B6B; font-weight: 600;">Team 1: ${lastState.teamScores.team1}</span>
+        <span style="color: #4ECDC4; font-weight: 600;">Team 2: ${lastState.teamScores.team2}</span>
+      </div>
+    `;
+    leadersEl.appendChild(teamScoreDiv);
+  }
+  
   entries.forEach((item) => {
     const li = document.createElement("li");
     const you = item.id === playerId ? " (you)" : "";
-    li.textContent = `${item.name}: ${item.score}${you}`;
+    const teamTag = item.team ? ` [T${item.team}]` : "";
+    li.textContent = `${item.name}: ${item.score}${teamTag}${you}`;
+    
+    // Color the li border based on team
+    if (item.team === 1) {
+      li.style.borderColor = "#FF6B6B";
+    } else if (item.team === 2) {
+      li.style.borderColor = "#4ECDC4";
+    }
+    
     leadersEl.appendChild(li);
   });
 }
 
+function updateTeamLobby(teams) {
+  const team1 = teams.team1 || [];
+  const team2 = teams.team2 || [];
+  
+  // Update Team 1
+  team1Count.textContent = `${team1.length} player${team1.length !== 1 ? 's' : ''}`;
+  if (team1.length === 0) {
+    team1Players.innerHTML = '<p style="color: var(--muted); font-size: 13px;">No players yet</p>';
+  } else {
+    team1Players.innerHTML = team1.map(p => {
+      const you = p.id === playerId ? " (you)" : "";
+      return `<div style="padding: 8px; margin: 4px 0; background: white; border: 2px solid var(--line); font-weight: 500;">${p.name}${you}</div>`;
+    }).join('');
+  }
+  
+  // Update Team 2
+  team2Count.textContent = `${team2.length} player${team2.length !== 1 ? 's' : ''}`;
+  if (team2.length === 0) {
+    team2Players.innerHTML = '<p style="color: var(--muted); font-size: 13px;">No players yet</p>';
+  } else {
+    team2Players.innerHTML = team2.map(p => {
+      const you = p.id === playerId ? " (you)" : "";
+      return `<div style="padding: 8px; margin: 4px 0; background: white; border: 2px solid var(--line); font-weight: 500;">${p.name}${you}</div>`;
+    }).join('');
+  }
+  
+  // Update status
+  const totalPlayers = team1.length + team2.length;
+  if (totalPlayers < 2) {
+    lobbyStatus.textContent = "Need at least 2 players on teams to start...";
+  } else if (team1.length === 0 || team2.length === 0) {
+    lobbyStatus.textContent = "Both teams need at least 1 player...";
+  } else {
+    lobbyStatus.textContent = `Ready to start! ${team1.length} vs ${team2.length}`;
+  }
+}
+
 function sendDirection(dir) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  if (isSpectator) return; // Spectators can't control
   socket.send(JSON.stringify({ type: "change_dir", dir }));
 }
 
@@ -271,6 +407,24 @@ endRoomBtn.addEventListener("click", () => {
   socket?.send(JSON.stringify({ type: "end_room" }));
 });
 
+// Team lobby controls
+joinTeam1Btn.addEventListener("click", () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: "select_team", team: 1 }));
+});
+
+joinTeam2Btn.addEventListener("click", () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: "select_team", team: 2 }));
+});
+
+startMatchBtn.addEventListener("click", () => {
+  if (!isHost || !socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: "start_match" }));
+});
+
+leaveLobbyBtn.addEventListener("click", () => leaveGame());
+
 function leaveGame() {
   socket?.close();
   socket = null;
@@ -279,6 +433,9 @@ function leaveGame() {
   isHost = false;
   endAt = null;
   roomEnded = false;
+  gameMode = "classic";
+  isSpectator = false;
+  myTeam = null;
   lastState = {
     ...lastState,
     players: [],
@@ -318,6 +475,13 @@ function drawSnake(player, cell) {
     const x = part.x * cell;
     const y = part.y * cell;
     const size = cell - 4;
+    
+    // Team border if in team mode
+    if (player.team) {
+      const borderColor = player.team === 1 ? "#FF6B6B" : "#4ECDC4";
+      ctx.fillStyle = borderColor;
+      ctx.fillRect(x, y, cell, cell);
+    }
     
     // Main body segment - square, no rounded corners
     ctx.fillStyle = player.color;

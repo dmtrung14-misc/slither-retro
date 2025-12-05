@@ -37,6 +37,13 @@
             <span class="mono">1-4 players</span>
           </div>
           <label>Nickname <input id="create-name" type="text" maxlength="18" placeholder="player" /></label>
+          <label>Game Mode
+            <select id="game-mode" style="width: 100%; margin-top: 8px; padding: 14px 16px; border: 3px solid var(--ink); background: var(--bg-soft); color: var(--ink); font-size: 15px; font-weight: 500; font-family: inherit;">
+              <option value="classic">Classic</option>
+              <option value="team">Team Deathmatch</option>
+            </select>
+            <span class="hint">Team mode requires team selection before start</span>
+          </label>
           <label>Map size <input id="map-size" type="range" min="16" max="64" value="32" />
             <span class="hint"><span id="map-size-value">32</span> tiles</span>
           </label>
@@ -65,6 +72,50 @@
           <button id="join-btn">Join</button>
           <button id="back-from-join" class="ghost small" style="margin-top: 12px;">Back</button>
         </section>
+      </div>
+    </div>
+
+    <div class="page hidden" id="team-lobby">
+      <div class="hero">
+        <p class="eyebrow">team deathmatch</p>
+        <h1>Choose Your Team</h1>
+        <p class="subtitle" id="lobby-room-code">Room: -----</p>
+      </div>
+
+      <div class="grid" style="max-width: 900px; margin: 20px auto;">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">team alpha</p>
+              <h2>Team 1</h2>
+            </div>
+            <span class="mono" id="team1-count">0 players</span>
+          </div>
+          <div id="team1-players" style="min-height: 80px; padding: 12px; background: var(--bg-soft); border: 3px solid var(--line); margin-bottom: 16px;">
+            <p style="color: var(--muted); font-size: 13px;">No players yet</p>
+          </div>
+          <button id="join-team1">Join Team 1</button>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">team bravo</p>
+              <h2>Team 2</h2>
+            </div>
+            <span class="mono" id="team2-count">0 players</span>
+          </div>
+          <div id="team2-players" style="min-height: 80px; padding: 12px; background: var(--bg-soft); border: 3px solid var(--line); margin-bottom: 16px;">
+            <p style="color: var(--muted); font-size: 13px;">No players yet</p>
+          </div>
+          <button id="join-team2">Join Team 2</button>
+        </section>
+      </div>
+
+      <div style="text-align: center; margin-top: 20px;">
+        <button id="start-match-btn" class="ghost" style="display: none;">Start Match</button>
+        <button id="leave-lobby-btn" class="ghost small" style="margin-left: 12px;">Leave Room</button>
+        <p id="lobby-status" style="margin-top: 16px; color: var(--muted); font-size: 14px;">Waiting for players to choose teams...</p>
       </div>
     </div>
 

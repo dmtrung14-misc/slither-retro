@@ -30,6 +30,8 @@ A competitive multiplayer snake game with a clean, pixelated aesthetic inspired 
 - Host controls: Adjustable map size (16-64), speed (1-5), player slots, and optional timer
 - Real-time leaderboard with top 5 players
 - Room codes for easy joining
+- **Team Deathmatch Mode**: Choose teams in lobby, compete for team supremacy
+- **Spectator Mode**: Late joiners watch the action in team matches
 
 ### 🎭 Smooth UX
 - Two-stage flow: Clean landing → immersive game screen
@@ -60,11 +62,14 @@ npm start
 ### Getting Started
 1. **Create a Room** or **Enter Room** from the landing page
 2. Customize settings (host only):
+   - Game Mode: Classic or Team Deathmatch
    - Map size: 16-64 tiles
    - Speed: 1-5 (faster = harder)
    - Max players: 1-4
    - Timer: 0-30 minutes (optional)
-3. Share the invite link with friends
+3. **For Team Deathmatch**: Choose your team in the lobby (Team 1 or Team 2)
+4. Host starts the match once teams are ready
+5. Share the invite link with friends
 
 ### Controls
 - **WASD** or **Arrow Keys** to move
@@ -84,6 +89,9 @@ npm start
 - 💎 Collect blue remains after kills for quick recovery
 - ⚡ Speed setting affects tick rate—higher speeds = faster reactions needed
 - 🧠 Remember: Eliminated snakes respawn, but their remains vanish after 10s
+- 🤝 **Team Mode**: Coordinate with teammates! Team kills add to your team score
+- 👥 **Team Mode**: Avoid crashing into teammates—friendly collisions still hurt!
+- 👀 **Spectator**: Join mid-match in team games to watch the battle unfold
 
 ## 🛠️ Tech Stack
 
@@ -96,6 +104,9 @@ npm start
 
 ```
 slither-retro/
+├── docs/               # Documentation
+│   ├── DEPLOYMENT.md   # Deployment guide
+│   └── TEAM_MODE_GUIDE.md  # Team mode documentation
 ├── public/
 │   ├── client.js       # Game rendering & client logic
 │   ├── index.html      # Main HTML structure
@@ -105,12 +116,18 @@ slither-retro/
 └── README.md
 ```
 
+## 📚 Documentation
+
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - How to deploy to Render, Railway, and other platforms
+- **[Team Deathmatch Guide](docs/TEAM_MODE_GUIDE.md)** - Complete guide to the team mode feature
+
 ## 🎮 Game Logic Highlights
 
 ### Collision Detection
 - **Player vs Player**: Victim decomposes, killer gains bonus
 - **Player vs Food**: Growth and points
 - **Border Collision**: Wraparound (no death)
+- **Team Mode**: Friendly fire causes collision (careful with teammates!)
 
 ### Server Authority
 - All game state managed server-side
@@ -141,9 +158,10 @@ Inspired by Crossy Road's clean visual language and Agar.io's competitive multip
 Feel free to fork, modify, and submit PRs! Some ideas:
 - Additional power-ups
 - More player slots
-- Spectator mode
 - Tournament brackets
 - Custom color palettes
+- Voice chat integration
+- Replay system
 
 ## 📝 License
 
@@ -151,11 +169,13 @@ MIT License - feel free to use this for your own projects!
 
 ## 🎯 Roadmap
 
-- [ ] Spectator mode
+- [x] Team Deathmatch mode
+- [x] Spectator mode
 - [ ] Better mobile support (touch controls)
 - [ ] Replay system
 - [ ] Achievement system
-- [ ] Custom game modes (team battle, capture the flag, etc.)
+- [ ] Additional game modes (capture the flag, king of the hill, etc.)
+- [ ] Power-ups and special abilities
 
 ---
 
