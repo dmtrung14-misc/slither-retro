@@ -124,6 +124,8 @@ slither-retro/
 
 ## 🎨 Design Philosophy
 
+![Gameplay](assets/gameplay.png)
+
 This game embraces a **brutalist, pixelated aesthetic**:
 - ✅ Sharp squares and hard borders
 - ✅ Monospace fonts (Courier New)
