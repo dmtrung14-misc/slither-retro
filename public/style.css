@@ -48,6 +48,10 @@ body {
   z-index: 1;
 }
 
+#landing {
+  justify-content: center;
+}
+
 .hidden {
   display: none !important;
 }

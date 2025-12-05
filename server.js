@@ -60,6 +60,7 @@ function createRoom(options) {
     hostId: null,
     food: null,
     bonusFood: null,
+    decomposedFood: [], // Array of {x, y, expiresAt} from dead snakes
     loop: null,
     bonusTimer: null,
     endAt:
@@ -217,7 +218,13 @@ function tickRoom(room) {
     endRoom(room, "timer");
     return;
   }
+  
+  const now = Date.now();
   const { mapSize } = room.options;
+  
+  // Clean up expired decomposed food
+  room.decomposedFood = room.decomposedFood.filter(f => f.expiresAt > now);
+  
   const occupancy = new Map();
 
   for (const p of room.players.values()) {
@@ -231,20 +238,47 @@ function tickRoom(room) {
     if (!player.alive) continue;
     player.dir = player.pendingDir;
     const head = player.body[0];
-    const next = { x: head.x + player.dir.x, y: head.y + player.dir.y };
+    let next = { x: head.x + player.dir.x, y: head.y + player.dir.y };
 
-    const hitWall =
-      next.x < 0 || next.x >= mapSize || next.y < 0 || next.y >= mapSize;
+    // Wraparound borders instead of wall death
+    if (next.x < 0) next.x = mapSize - 1;
+    if (next.x >= mapSize) next.x = 0;
+    if (next.y < 0) next.y = mapSize - 1;
+    if (next.y >= mapSize) next.y = 0;
 
-    const hitSnake = occupancy.has(`${next.x}:${next.y}`);
+    const hitSnakeId = occupancy.get(`${next.x}:${next.y}`);
 
-    if (hitWall || hitSnake) {
-      player.alive = false;
-      broadcast(room, {
-        type: "system",
-        message: `${player.name} crashed.`,
+    if (hitSnakeId) {
+      // Snake collision - player dies
+      const victim = player;
+      const killer = room.players.get(hitSnakeId);
+      const victimLength = victim.body.length;
+      
+      // Calculate kill bonus based on victim's size
+      const baseKillBonus = 30;
+      const killBonus = Math.floor(baseKillBonus + victimLength * 5);
+      
+      // Award bonus to killer (more points for killing bigger snakes)
+      if (killer && killer.alive) {
+        killer.score += killBonus;
+        killer.grow += Math.floor(victimLength / 3); // Grow based on victim size
+        broadcast(room, {
+          type: "system",
+          message: `${killer.name} eliminated ${victim.name}! +${killBonus} pts`,
+        });
+      }
+      
+      // Decompose victim's body into food
+      victim.body.forEach(part => {
+        room.decomposedFood.push({
+          x: part.x,
+          y: part.y,
+          expiresAt: now + 10000, // 10 seconds
+        });
       });
-      setTimeout(() => respawnPlayer(room, player), 1200);
+      
+      victim.alive = false;
+      setTimeout(() => respawnPlayer(room, victim), 1200);
       continue;
     }
 
@@ -252,6 +286,8 @@ function tickRoom(room) {
     occupancy.set(`${next.x}:${next.y}`, player.id);
 
     let consumed = false;
+    
+    // Check regular food
     if (room.food && next.x === room.food.x && next.y === room.food.y) {
       player.grow += 1;
       player.score += 10;
@@ -259,6 +295,7 @@ function tickRoom(room) {
       spawnFood(room);
     }
 
+    // Check bonus food
     if (
       room.bonusFood &&
       next.x === room.bonusFood.x &&
@@ -268,6 +305,16 @@ function tickRoom(room) {
       player.score += 50;
       room.bonusFood = null;
       scheduleBonus(room);
+    }
+    
+    // Check decomposed food (blue food from dead snakes)
+    const decomposedIndex = room.decomposedFood.findIndex(
+      f => f.x === next.x && f.y === next.y
+    );
+    if (decomposedIndex !== -1) {
+      player.grow += 1;
+      player.score += 15; // Slightly more than regular food
+      room.decomposedFood.splice(decomposedIndex, 1);
     }
 
     if (player.grow > 0) {
@@ -298,6 +345,7 @@ function broadcastState(room) {
     type: "state",
     food: room.food,
     bonusFood: room.bonusFood,
+    decomposedFood: room.decomposedFood.map(f => ({ x: f.x, y: f.y })), // Send decomposed food to clients
     mapSize: room.options.mapSize,
     players: [],
     leaderboard: [],

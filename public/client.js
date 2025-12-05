@@ -66,6 +66,7 @@ let lastState = {
   players: [],
   food: null,
   bonusFood: null,
+  decomposedFood: [],
   mapSize: 32,
   leaderboard: [],
   hostId: null,
@@ -283,6 +284,7 @@ function leaveGame() {
     players: [],
     food: null,
     bonusFood: null,
+    decomposedFood: [],
     leaderboard: [],
     hostId: null,
     endAt: null,
@@ -368,7 +370,7 @@ window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 function render() {
-  const { mapSize, players, food, bonusFood } = lastState;
+  const { mapSize, players, food, bonusFood, decomposedFood } = lastState;
   const ratio = window.devicePixelRatio || 1;
   const cell = Math.max(8, Math.floor(logicalSize / mapSize));
 
@@ -384,6 +386,13 @@ function render() {
 
   if (bonusFood) {
     drawFood(bonusFood, cell, "#ef5350", 1);
+  }
+  
+  // Draw decomposed food (blue)
+  if (decomposedFood && decomposedFood.length > 0) {
+    decomposedFood.forEach(df => {
+      drawFood(df, cell, "#5c6bc0", 0.6); // Blue, smaller size
+    });
   }
 
   players.forEach((p) => drawSnake(p, cell));
