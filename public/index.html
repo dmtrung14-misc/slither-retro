@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slither Retro</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="page" id="landing">
+      <div class="hero">
+        <p class="eyebrow">multiplayer snake</p>
+        <h1>Slither Retro</h1>
+        <p class="subtitle">
+          Choose your path. Create a room or enter an existing one.
+        </p>
+      </div>
+
+      <div id="mode-selector" class="mode-selector">
+        <button id="show-create-btn" class="mode-btn">Create Room</button>
+        <button id="show-join-btn" class="mode-btn ghost">Enter Room</button>
+      </div>
+
+      <div class="grid" id="forms-container" style="display: none;">
+        <section class="card slim" id="create-form" style="display: none;">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">host</p>
+              <h2>Create room</h2>
+            </div>
+            <span class="mono">1-4 players</span>
+          </div>
+          <label>Nickname <input id="create-name" type="text" maxlength="18" placeholder="player" /></label>
+          <label>Map size <input id="map-size" type="range" min="16" max="64" value="32" />
+            <span class="hint"><span id="map-size-value">32</span> tiles</span>
+          </label>
+          <label>Speed <input id="speed" type="range" min="1" max="5" value="3" />
+            <span class="hint">level <span id="speed-value">3</span></span>
+          </label>
+          <label>Max players <input id="max-players" type="range" min="1" max="4" value="4" />
+            <span class="hint"><span id="max-players-value">4</span> seats</span>
+          </label>
+          <label>Timer (min) <input id="timer-minutes" type="range" min="0" max="30" value="0" />
+            <span class="hint"><span id="timer-value">0</span> = no timer</span>
+          </label>
+          <button id="create-btn">Start Room</button>
+          <button id="back-from-create" class="ghost small" style="margin-top: 12px;">Back</button>
+        </section>
+
+        <section class="card slim" id="join-form" style="display: none;">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">join</p>
+              <h2>Enter room</h2>
+            </div>
+          </div>
+          <label>Nickname <input id="join-name" type="text" maxlength="18" placeholder="player" /></label>
+          <label>Room code <input id="room-code" type="text" maxlength="5" placeholder="ABCDE" /></label>
+          <button id="join-btn">Join</button>
+          <button id="back-from-join" class="ghost small" style="margin-top: 12px;">Back</button>
+        </section>
+      </div>
+    </div>
+
+    <div class="page hidden" id="play">
+      <div class="play-shell">
+        <aside class="side">
+          <div class="side-head">
+            <div>
+              <p class="eyebrow">room</p>
+              <div class="room-line">
+                <span class="pill" id="room-label">Room --</span>
+                <span class="pill muted" id="timer-label" hidden>Timer --</span>
+              </div>
+              <p class="muted" id="status">Connecting...</p>
+            </div>
+            <div class="side-actions">
+              <button id="copy-link" class="ghost small" hidden>Copy invite</button>
+              <button id="end-room-btn" class="ghost small" hidden>End room</button>
+              <button id="exit-btn" class="small">Exit</button>
+            </div>
+          </div>
+
+          <div class="side-card">
+            <div class="card-head"><p class="eyebrow">score</p><h3>Leaderboard</h3></div>
+            <ol id="leaders"></ol>
+          </div>
+
+          <div class="side-card">
+            <div class="card-head"><p class="eyebrow">how</p><h3>Controls</h3></div>
+            <ul class="bullets">
+              <li>WASD / arrows to move</li>
+              <li>Green orb +10 &amp; growth</li>
+              <li>Red bonus +50 &amp; big growth</li>
+              <li>Walls and bodies are solid</li>
+            </ul>
+          </div>
+        </aside>
+
+        <div class="board-wrap">
+          <div class="play-area" id="board">
+            <canvas id="game"></canvas>
+            <div id="overlay" class="overlay hidden">
+              <div class="overlay-card">
+                <h2 id="overlay-title">Ready?</h2>
+                <p id="overlay-body">Join a room to start.</p>
+                <ol id="overlay-leaders" class="overlay-leaders"></ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="client.js"></script>
+  </body>
+</html>
+

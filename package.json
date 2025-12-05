@@ -1,0 +1,19 @@
+{
+  "name": "slither-retro",
+  "version": "0.1.0",
+  "description": "Retro-styled multiplayer snake/slither game with rooms, scoring, and leaderboards.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nanoid": "^5.0.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
+
