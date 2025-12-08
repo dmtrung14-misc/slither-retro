@@ -171,7 +171,6 @@ MIT License - feel free to use this for your own projects!
 
 - [x] Team Deathmatch mode
 - [x] Spectator mode
-- [ ] Better mobile support (touch controls)
 - [ ] Replay system
 - [ ] Achievement system
 - [ ] Additional game modes (capture the flag, king of the hill, etc.)
